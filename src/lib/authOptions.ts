@@ -2,6 +2,7 @@ import NextAuth, { CredentialsSignin } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
 import AppleProvider from "next-auth/providers/apple"
+import { User } from "@/models/userModel"
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -16,20 +17,36 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             email: { label: "Email", type: "email", placeholder: "Enter your Email" },
             password: { label: "Password", type: "password", placeholder: "Enter your Password" },
         },
-        authorize: async ({email, password}) => {
-            console.log("Credentials", email, password);
+        authorize: async (credentials:any) => {
 
-            if (typeof email !== "string") {
-                throw new CredentialsSignin("Invalid email")
+            const { email, password } = credentials as string | any
+
+            if (!email || !password) {
+                throw new CredentialsSignin("Email and Password are required")
             }
 
-            const user = {  email, _id:"1", name: "Demo User" }
+            const user = await User.findOne({ email }).select("+password")
 
-            if (password === "password123" && email === "vikashsinghal509@gmail.com") {
-                return user
-            } else {
+            if (!user) {
+                throw new CredentialsSignin("No user found with the given email")
+            }
+
+            if (!user.password) {
+                throw new CredentialsSignin("Please login with Google")
+            }
+
+            const isMatch = password === user.password;
+
+            if (!isMatch) {
                 throw new CredentialsSignin("Invalid email or password")
             }
+            
+            return {
+                name: user.name,
+                email: user.email,
+                id: user._id.toString(),
+            };
+
         }
     }),
   ],
