@@ -36,17 +36,17 @@ export default function SignInViewPage() {
           >
             <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
           </svg>
-          VJM ADMIN PANEL
+          USER ADMIN PANEL
         </div>
         <div className="relative z-20 mt-auto">
-          {/* <blockquote className="space-y-2">
+          <blockquote className="space-y-2">
             <p className="text-lg">
               &ldquo;This library has saved me countless hours of work and
               helped me deliver stunning designs to my clients faster than ever
               before.&rdquo;
             </p>
             <footer className="text-sm">Sofia Davis</footer>
-          </blockquote> */}
+          </blockquote>
         </div>
       </div>
       <div className="flex h-full items-center p-4 lg:p-8">
@@ -60,7 +60,7 @@ export default function SignInViewPage() {
             </p>
           </div>
           <UserAuthForm />
-          {/* <p className="px-8 text-center text-sm text-muted-foreground">
+          <p className="px-8 text-center text-sm text-muted-foreground">
             By clicking continue, you agree to our{' '}
             <Link
               href="/terms"
@@ -76,7 +76,7 @@ export default function SignInViewPage() {
               Privacy Policy
             </Link>
             .
-          </p> */}
+          </p>
         </div>
       </div>
     </div>
