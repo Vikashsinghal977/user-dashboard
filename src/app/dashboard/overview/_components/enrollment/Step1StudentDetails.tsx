@@ -41,9 +41,10 @@ interface Step1StudentDetailsProps {
   data?: Partial<StudentFormData>;
   update?: (data: StudentFormData) => void;
   nextStep?: () => void;
+  bookKey?: any
 }
 
-export default function Step1StudentDetails({ data, update, nextStep }: Step1StudentDetailsProps) {
+export default function Step1StudentDetails({ data, update, nextStep, bookKey }: Step1StudentDetailsProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<StudentFormData>({

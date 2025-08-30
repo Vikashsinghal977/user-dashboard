@@ -1,23 +1,30 @@
 'use client';
 
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import PageContainer from '@/components/layout/page-container';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { useState } from 'react';
 
-// ----- Zod Schema -----
+// ----------------- Zod Schema -----------------
 const academicSchema = z.object({
-  class: z.enum(["9", "10", "11", "12"]),
-  subjects: z.array(z.string()),
-  examGoal: z.enum(["Board Excellence", "Concept Mastery", "Competitive Prep"]),
-  weeklyStudyHours: z.number().min(1).max(40),
+  class: z.enum(["9", "10", "11", "12"], {
+    message: 'Please select a class'
+  }),
+  subjects: z.array(z.string()).min(1, 'Please select at least one subject'),
+  examGoal: z.enum(["Board Excellence", "Concept Mastery", "Competitive Prep"], {
+    message: 'Please select an exam goal'
+  }),
+  weeklyStudyHours: z.number().min(1, 'Weekly study hours must be at least 1').max(40, 'Weekly study hours cannot exceed 40'),
   scholarship: z.boolean(),
-  lastExamPercentage: z.number().min(0).max(100).optional(),
+  lastExamPercentage: z.number().min(0, 'Percentage must be at least 0').max(100, 'Percentage cannot exceed 100').optional(),
   achievements: z.string().optional(),
 }).refine(data => {
   // Validate subjects count based on class
@@ -27,127 +34,289 @@ const academicSchema = z.object({
   if (data.class === "11" || data.class === "12") {
     if (data.subjects.length < 3) return false;
   }
-  // scholarship conditional
-  if (data.scholarship && data.lastExamPercentage === undefined) return false;
   return true;
 }, {
-  message: "Select at least 2 subjects for Class 9–10, 3 for Class 11–12. Last Exam Percentage is required for scholarship.",
+  message: "Select at least 2 subjects for Class 9–10, 3 for Class 11–12",
   path: ["subjects"]
+}).refine(data => {
+  // Scholarship conditional validation
+  if (data.scholarship && (data.lastExamPercentage === undefined || data.lastExamPercentage === null)) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Last Exam Percentage is required when applying for scholarship",
+  path: ["lastExamPercentage"]
 });
 
-// ----- Form Component -----
-export default function AcademicStep() {
-  const { register, handleSubmit, control, watch, formState: { errors } } = useForm({
+type AcademicFormData = z.infer<typeof academicSchema>;
+
+// ----------------- Component -----------------
+interface AcademicStepProps {
+  data?: Partial<AcademicFormData>;
+  update?: (data: AcademicFormData) => void;
+  nextStep?: () => void;
+  bookKey?: string;
+  prevStep?: () => void;
+}
+
+export default function AcademicStep({ data, update, nextStep, bookKey, prevStep }: AcademicStepProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const form = useForm<AcademicFormData>({
     resolver: zodResolver(academicSchema),
     defaultValues: {
-      class: "10",
-      subjects: [],
-      examGoal: undefined,
-      weeklyStudyHours: 5,
-      scholarship: false,
-      lastExamPercentage: undefined,
-      achievements: ""
+      class: data?.class || undefined,
+      subjects: data?.subjects || [],
+      examGoal: data?.examGoal || undefined,
+      weeklyStudyHours: data?.weeklyStudyHours || 5,
+      scholarship: data?.scholarship || false,
+      lastExamPercentage: data?.lastExamPercentage || undefined,
+      achievements: data?.achievements || '',
     }
   });
 
-  const watchClass = watch("class");
-  const watchScholarship = watch("scholarship");
+  const watchClass = form.watch("class");
+  const watchScholarship = form.watch("scholarship");
+  const watchSubjects = form.watch("subjects");
 
   const subjectsOptions: Record<string, string[]> = {
     "9": ["English", "Mathematics", "Science", "Social Science", "Hindi/Sanskrit"],
     "10": ["English", "Mathematics", "Science", "Social Science", "Hindi/Sanskrit"],
     "11": ["Physics", "Chemistry", "Mathematics", "Biology", "Computer Science", "English"],
     "12": ["Physics", "Chemistry", "Mathematics", "Biology", "Computer Science", "English"]
+  };
+
+  async function onSubmit(formData: AcademicFormData) {
+    setIsSubmitting(true);
+    try {
+      // Call the update function if provided
+      if (update) {
+        update(formData);
+      }
+      
+      // Move to next step if provided
+      if (nextStep) {
+        nextStep();
+      }
+      
+      console.log('Academic form submitted successfully:', formData);
+    } catch (error) {
+      console.error('Error submitting academic form:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  const onSubmit = (data: any) => {
-    console.log("Form Data:", data);
+  const handleSubjectChange = (subject: string, checked: boolean) => {
+    const currentSubjects = watchSubjects || [];
+    if (checked) {
+      form.setValue("subjects", [...currentSubjects, subject]);
+    } else {
+      form.setValue("subjects", currentSubjects.filter(s => s !== subject));
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 p-4">
-      
-      {/* Class */}
-      <label className="block">
-        Class
-        <select {...register("class")} className="mt-1 block w-full border p-2 rounded">
-          <option value="9">9</option>
-          <option value="10">10</option>
-          <option value="11">11</option>
-          <option value="12">12</option>
-        </select>
-      </label>
+    <PageContainer scrollable>
+      <Card className="mx-auto mb-16 w-full">
+        <CardHeader>
+          <CardTitle className="text-left text-2xl font-bold">
+            Step 2 - Academic Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              
+              {/* Class Field */}
+              <FormField
+                control={form.control}
+                name="class"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Class *</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select your class" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="9">Class 9</SelectItem>
+                        <SelectItem value="10">Class 10</SelectItem>
+                        <SelectItem value="11">Class 11</SelectItem>
+                        <SelectItem value="12">Class 12</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-      {/* Subjects (Multi-Select) */}
-      <Controller
-        control={control}
-        name="subjects"
-        render={({ field }) => (
-          <div className="space-y-2">
-            {subjectsOptions[watchClass].map(sub => (
-              <label key={sub} className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  value={sub}
-                  checked={field.value?.includes(sub)}
-                  onChange={e => {
-                    if (e.target.checked) {
-                      field.onChange([...(field.value || []), sub]);
-                    } else {
-                      field.onChange((field.value || []).filter((s: string) => s !== sub));
-                    }
-                  }}
-                />
-                <span>{sub}</span>
-              </label>
-            ))}
-          </div>
-        )}
-      />
-      {errors.subjects && <p className="text-red-500">{errors.subjects.message}</p>}
+              {/* Subjects Multi-Select */}
+              <FormField
+                control={form.control}
+                name="subjects"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Subjects * 
+                      <span className="text-sm text-gray-500 ml-2">
+                        (Select at least {watchClass === "9" || watchClass === "10" ? "2" : "3"} subjects)
+                      </span>
+                    </FormLabel>
+                    <FormControl>
+                      <div className="grid grid-cols-2 gap-3 p-4 border rounded-md">
+                        {watchClass && subjectsOptions[watchClass]?.map((subject) => (
+                          <div key={subject} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={subject}
+                              checked={watchSubjects?.includes(subject) || false}
+                              onCheckedChange={(checked) => 
+                                handleSubjectChange(subject, checked as boolean)
+                              }
+                            />
+                            <label 
+                              htmlFor={subject}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                            >
+                              {subject}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-      {/* Exam Goal */}
-      <label className="block">
-        Exam Goal
-        <select {...register("examGoal")} className="mt-1 block w-full border p-2 rounded">
-          <option value="">Select Goal</option>
-          <option value="Board Excellence">Board Excellence</option>
-          <option value="Concept Mastery">Concept Mastery</option>
-          <option value="Competitive Prep">Competitive Prep</option>
-        </select>
-        {errors.examGoal && <p className="text-red-500">{errors.examGoal.message}</p>}
-      </label>
+              {/* Exam Goal */}
+              <FormField
+                control={form.control}
+                name="examGoal"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Exam Goal *</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select your exam goal" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Board Excellence">Board Excellence</SelectItem>
+                        <SelectItem value="Concept Mastery">Concept Mastery</SelectItem>
+                        <SelectItem value="Competitive Prep">Competitive Prep</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-      {/* Weekly Study Hours */}
-      <label className="block">
-        Weekly Study Hours
-        <input type="number" {...register("weeklyStudyHours", { valueAsNumber: true })} className="mt-1 block w-full border p-2 rounded" min={1} max={40} />
-        {errors.weeklyStudyHours && <p className="text-red-500">{errors.weeklyStudyHours.message}</p>}
-      </label>
+              {/* Weekly Study Hours */}
+              <FormField
+                control={form.control}
+                name="weeklyStudyHours"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Weekly Study Hours *</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number"
+                        placeholder="Enter weekly study hours"
+                        min={1}
+                        max={40}
+                        {...field}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-      {/* Scholarship Toggle */}
-      <label className="flex items-center space-x-2">
-        <Checkbox {...register("scholarship")} />
-        <span>Applying for Scholarship?</span>
-      </label>
+              {/* Scholarship Checkbox */}
+              <FormField
+                control={form.control}
+                name="scholarship"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>
+                        Applying for Scholarship?
+                      </FormLabel>
+                    </div>
+                  </FormItem>
+                )}
+              />
 
-      {/* Conditional Scholarship Fields */}
-      {watchScholarship && (
-        <>
-          <label className="block">
-            Last Exam Percentage
-            <input type="number" {...register("lastExamPercentage", { valueAsNumber: true })} className="mt-1 block w-full border p-2 rounded" min={0} max={100} />
-            {errors.lastExamPercentage && <p className="text-red-500">{errors.lastExamPercentage.message}</p>}
-          </label>
+              {/* Conditional Scholarship Fields */}
+              {watchScholarship && (
+                <>
+                  {/* Last Exam Percentage */}
+                  <FormField
+                    control={form.control}
+                    name="lastExamPercentage"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Last Exam Percentage *</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number"
+                            placeholder="Enter your last exam percentage"
+                            min={0}
+                            max={100}
+                            step="0.01"
+                            {...field}
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-          <label className="block">
-            Achievements
-            <Textarea {...register("achievements")} placeholder="Optional achievements..." />
-          </label>
-        </>
-      )}
+                  {/* Achievements */}
+                  <FormField
+                    control={form.control}
+                    name="achievements"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Achievements (Optional)</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            placeholder="Describe your academic achievements, awards, competitions, etc."
+                            className="min-h-[100px]"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
 
-      <Button type="submit">Next</Button>
-    </form>
+              <Button 
+                type="submit" 
+                className="w-full"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Submitting...' : 'Continue to Next Step'}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+    </PageContainer>
   );
 }

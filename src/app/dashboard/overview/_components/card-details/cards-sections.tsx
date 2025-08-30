@@ -15,7 +15,6 @@ interface Book {
 
 interface CardtableProps {
   data: Book[];
-  handleSearch?: (query: string) => void;
   enrolledBooks?: Set<string>;
   enrollingBooks?: Set<string>;
   handleEnrollment?: (bookKey: string, bookTitle: string) => void;
@@ -23,7 +22,6 @@ interface CardtableProps {
 
 export default function Cardtable({ 
   data, 
-  handleSearch, 
   enrolledBooks = new Set(), 
   enrollingBooks = new Set(),
   handleEnrollment 
