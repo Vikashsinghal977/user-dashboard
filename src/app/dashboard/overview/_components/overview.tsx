@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useState, useEffect, useCallback } from 'react';
 import { debounce } from 'lodash';
 import PageContainer from '@/components/layout/page-container';
 import {
@@ -14,7 +13,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, BookOpen, BookMarked } from 'lucide-react';
+import Cardtable from './card-details/cards-sections';
+import { useRouter } from 'next/navigation';
 
 interface Book {
   key: string;
@@ -31,25 +32,26 @@ interface SearchResponse {
 }
 
 const QUICK_FILTERS = ['science', 'mathematics', 'history', 'biology', 'astronomy'] as const;
-const BOOKS_PER_PAGE = 20;
-const CARD_HEIGHT = 350;
+const BOOKS_PER_PAGE = 9;
 const SEARCH_DEBOUNCE_MS = 400;
 
 export default function LibraryPage() {
-  const parentRef = useRef<HTMLDivElement>(null);
-  const loadMoreRef = useRef<HTMLDivElement>(null);
-  
+  const router = useRouter();
   const [books, setBooks] = useState<Book[]>([]);
   const [query, setQuery] = useState<string>('science');
-  const [inputValue, setInputValue] = useState<string>('');
+  const [inputValue, setInputValue] = useState<string>('science');
   const [page, setPage] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(false);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [hasMore, setHasMore] = useState<boolean>(true);
+  const [enrolledBooks, setEnrolledBooks] = useState<Set<string>>(new Set());
+  const [enrollingBooks, setEnrollingBooks] = useState<Set<string>>(new Set());
 
   // Debounced search handler
   const debouncedSearch = useCallback(
     debounce((searchQuery: string) => {
-      setQuery(searchQuery.trim() || 'science');
+      const trimmedQuery = searchQuery.trim() || 'science';
+      setQuery(trimmedQuery);
       setPage(1);
       setBooks([]);
       setHasMore(true);
@@ -73,10 +75,15 @@ export default function LibraryPage() {
   };
 
   // Fetch books from Open Library API
-  const fetchBooks = useCallback(async (searchQuery: string, pageNum: number) => {
+  const fetchBooks = useCallback(async (searchQuery: string, pageNum: number, isLoadMore = false) => {
     if (!searchQuery.trim()) return;
 
-    setLoading(true);
+    if (isLoadMore) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
+
     try {
       const response = await fetch(
         `https://openlibrary.org/search.json?q=${encodeURIComponent(
@@ -101,42 +108,21 @@ export default function LibraryPage() {
       console.error('Error fetching books:', error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, []);
 
-  // Effect to fetch books when query or page changes
+  // Effect to fetch books when query changes
   useEffect(() => {
-    fetchBooks(query, page);
-  }, [fetchBooks, query, page]);
+    fetchBooks(query, 1);
+  }, [fetchBooks, query]);
 
-  // Infinite scroll observer
-  useEffect(() => {
-    const currentLoadMoreRef = loadMoreRef.current;
-    if (!currentLoadMoreRef || !hasMore || loading) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setPage(prevPage => prevPage + 1);
-        }
-      },
-      { threshold: 0.5 }
-    );
-
-    observer.observe(currentLoadMoreRef);
-    
-    return () => {
-      observer.disconnect();
-    };
-  }, [loading, hasMore]);
-
-  // Virtual scrolling setup
-  const rowVirtualizer = useVirtualizer({
-    count: books.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => CARD_HEIGHT,
-    overscan: 5,
-  });
+  // Handle load more
+  const handleLoadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    fetchBooks(query, nextPage, true);
+  };
 
   // Helper function to get book cover URL
   const getCoverUrl = (coverId?: number): string | null => {
@@ -151,19 +137,50 @@ export default function LibraryPage() {
     return authors.slice(0, 2).join(', ');
   };
 
+  // Handle book enrollment
+  const handleEnrollment = async (bookKey: string, bookTitle: string) => {
+    if (enrolledBooks.has(bookKey)) {
+      // Unenroll
+      setEnrolledBooks(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(bookKey);
+        return newSet;
+      });
+    } else {
+      // Enroll
+      setEnrollingBooks(prev => new Set(prev).add(bookKey));
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setEnrolledBooks(prev => new Set(prev).add(bookKey));
+      setEnrollingBooks(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(bookKey);
+        return newSet;
+      });
+
+      router.push(`/dashboard/enroll?bookKey=${bookKey}&bookTitle=${encodeURIComponent(bookTitle)}`);
+    }
+  };
+
   return (
     <PageContainer scrollable>
       <div className="space-y-6">
         {/* Header and Search */}
         <div className="space-y-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <h1 className="text-3xl font-bold tracking-tight">Library</h1>
+            <div className="flex items-center gap-3">
+              <BookOpen className="h-8 w-8" />
+              <h1 className="text-3xl font-bold tracking-tight">Library</h1>
+            </div>
             <div className="relative">
               <Input
                 placeholder="Search books..."
                 value={inputValue}
                 onChange={(e) => handleInputChange(e.target.value)}
                 className="w-full md:w-80"
+                disabled={loading}
               />
             </div>
           </div>
@@ -177,6 +194,7 @@ export default function LibraryPage() {
                 size="sm"
                 onClick={() => handleQuickFilter(filter)}
                 className="capitalize"
+                disabled={loading}
               >
                 {filter}
               </Button>
@@ -185,143 +203,80 @@ export default function LibraryPage() {
         </div>
 
         {/* Results Count */}
-        {books.length > 0 && (
-          <p className="text-sm text-muted-foreground">
-            Showing {books.length} books for "{query}"
-          </p>
+        {books.length > 0 && !loading && (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing {books.length} books for "{query}"
+            </p>
+            {enrolledBooks.size > 0 && (
+              <p className="text-sm text-green-600 font-medium">
+                {enrolledBooks.size} book{enrolledBooks.size === 1 ? '' : 's'} enrolled
+              </p>
+            )}
+          </div>
         )}
 
-        {/* Virtualized Book Grid */}
-        <div
-          ref={parentRef}
-          className="h-[calc(100vh-300px)] overflow-auto rounded-lg border"
-        >
-          <div
-            style={{
-              height: `${rowVirtualizer.getTotalSize()}px`,
-              position: 'relative',
-            }}
-          >
-            {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-              const book = books[virtualItem.index];
-              if (!book) return null;
-
-              const coverUrl = getCoverUrl(book.cover_i);
-              const authors = formatAuthors(book.author_name);
-
-              return (
-                <div
-                  key={book.key}
-                  data-index={virtualItem.index}
-                  ref={rowVirtualizer.measureElement}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${virtualItem.start}px)`,
-                  }}
-                >
-                  <Card className="mx-4 my-2 overflow-hidden transition-all duration-200 hover:shadow-lg hover:scale-[1.01]">
-                    <div className="flex">
-                      {/* Book Cover */}
-                      <div className="relative w-32 h-48 flex-shrink-0">
-                        {coverUrl ? (
-                          <img
-                            src={coverUrl}
-                            alt={`Cover of ${book.title}`}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-muted flex items-center justify-center">
-                            <span className="text-xs text-muted-foreground text-center px-2">
-                              No Cover
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Book Details */}
-                      <div className="flex-1">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="line-clamp-2 text-lg">
-                            {book.title}
-                          </CardTitle>
-                          <CardDescription className="text-sm">
-                            {authors}
-                          </CardDescription>
-                        </CardHeader>
-                        
-                        <CardContent className="pt-0">
-                          {book.first_publish_year && (
-                            <p className="text-sm text-muted-foreground mb-3">
-                              First published: {book.first_publish_year}
-                            </p>
-                          )}
-                          
-                          {book.subject && book.subject.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {book.subject.slice(0, 4).map((subject, index) => (
-                                <Badge 
-                                  key={index} 
-                                  variant="secondary" 
-                                  className="text-xs"
-                                >
-                                  {subject}
-                                </Badge>
-                              ))}
-                              {book.subject.length > 4 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{book.subject.length - 4} more
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-                        </CardContent>
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Loading State and Infinite Scroll Sentinel */}
-          {hasMore && (
-            <div ref={loadMoreRef} className="h-20 flex items-center justify-center">
-              {loading && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Loading more books...</span>
-                </div>
-              )}
+        {/* Loading State for Initial Load */}
+        {loading && books.length === 0 && (
+          <div className="flex items-center justify-center h-64">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>Searching for books...</span>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* No More Results */}
-          {!hasMore && books.length > 0 && (
-            <div className="h-20 flex items-center justify-center">
-              <p className="text-sm text-muted-foreground">
-                No more books to load
+        {/* Empty State */}
+        {!loading && books.length === 0 && query && (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <BookOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-lg font-medium text-muted-foreground">
+                No books found
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Try adjusting your search query or browse our categories
               </p>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Empty State */}
-          {!loading && books.length === 0 && (
-            <div className="h-64 flex items-center justify-center">
-              <div className="text-center">
-                <p className="text-lg font-medium text-muted-foreground">
-                  No books found
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Try adjusting your search query
+        {/* Books Grid */}
+        {books.length > 0 && (
+          <div className="space-y-6">
+            <Cardtable data={books}  enrolledBooks={enrolledBooks} enrollingBooks={enrollingBooks}handleEnrollment={handleEnrollment} />
+
+            {/* Load More Button */}
+            {hasMore && (
+              <div className="flex justify-center pt-4">
+                <Button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  size="lg"
+                  className="min-w-32"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Load More Books'
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* End of Results */}
+            {!hasMore && books.length >= BOOKS_PER_PAGE && (
+              <div className="text-center pt-4">
+                <p className="text-sm text-muted-foreground">
+                  You've reached the end of the results
                 </p>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </PageContainer>
   );
